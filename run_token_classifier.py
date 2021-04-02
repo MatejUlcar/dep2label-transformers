@@ -44,7 +44,7 @@ import torch
 from dep2label.labeling import *
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "tree2labels"))
-
+logger = logging.getLogger()
 BERT_MODEL="bert_model"
 OPENIA_GPT_MODEL="openai_gpt_model"
 GPT2_MODEL="gpt2_model"
@@ -61,10 +61,11 @@ MODELS = {BERT_MODEL: (BertModel,       BertTokenizer,       'bert-base-uncased'
 
 class MTLBertForTokenClassification(BertPreTrainedModel):
 
-    def __init__(self, config, finetune, use_bilstms=False):
-        
+    def __init__(self, config, finetune, list_labels=[], use_bilstms=False):
+        #config2 = config
+        #config2.num_labels = 2
         super(MTLBertForTokenClassification, self).__init__(config)
-        self.num_labels = config.num_labels
+        self.num_labels = list_labels
         self.num_tasks = len(self.num_labels)
         self.bert = BertModel(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob) 
@@ -1006,7 +1007,6 @@ def main():
     parser.add_argument("--cache_dir", default=PYTORCH_PRETRAINED_BERT_CACHE)
 
     args = parser.parse_args()
-
     processors = {"sl_tsv": SLProcessor(args.label_split_char)}
 
     if args.log is not None:
@@ -1039,7 +1039,6 @@ def main():
 
     if not args.do_train and not args.do_eval and not args.do_test:
         raise ValueError("At least one of `do_train` or `do_eval` or `do_test` must be True.")
-
     task_name = args.task_name.lower()
     if task_name not in processors:
         raise ValueError("Task not found: %s" % (task_name))
@@ -1050,14 +1049,21 @@ def main():
     label_reverse_map = [{i:label for i,label in enumerate(labels)}
                          for labels in label_list]
     num_tasks = len(label_list)
+    ### INSERTED
+    print('task name', task_name)
+    print('num labels', num_labels)
+    print('label list', label_list)
+    print('num tasks', num_tasks)
+    ###
 
-    if args.transformer_model in MODELS:
-        model_class,tokenizer_class, pretrained_model = MODELS[args.transformer_model]
-    else:
-        raise KeyError("The transformer model ({}) does not exist".format(args.transformer_model))
-
-    tokenizer = tokenizer_class.from_pretrained(args.transformer_pretrained_model, do_lower_case=args.do_lower_case)
-
+    #if args.transformer_model in MODELS:
+    #    model_class,tokenizer_class, pretrained_model = MODELS[args.transformer_model]
+    #else:
+    #    raise KeyError("The transformer model ({}) does not exist".format(args.transformer_model))
+    model_class = AutoModel
+    tokenizer_class = AutoTokenizer
+    pretrained_model = args.transformer_pretrained_model
+    tokenizer = tokenizer_class.from_pretrained(args.transformer_pretrained_model, do_lower_case=args.do_lower_case, use_fast=False)
     train_examples = None
     num_train_optimization_steps = None
     if args.do_train:
@@ -1072,12 +1078,14 @@ def main():
     if args.status=="train":
         extra_config.write_extra_bert_config(os.path.join(args.model_dir) + ".extra_config")
 
-    if args.transformer_model == BERT_MODEL:
+    if args.transformer_model == BERT_MODEL or True:
 
         model = MTLBertForTokenClassification.from_pretrained(args.transformer_pretrained_model,
                                                       # cache_dir=PYTORCH_PRETRAINED_BERT_CACHE / 'distributed_{}'.format(args.local_rank),
-                                                       num_labels=num_labels,
+                                                       num_labels=2,
                                                        finetune=not args.not_finetune,
+                                                       return_dict=False,
+                                                       list_labels=num_labels,
                                                        use_bilstms=args.use_bilstms)
     elif args.transformer_model == DISTILBERT_MODEL:
 
@@ -1237,8 +1245,9 @@ def main():
         model = MTLBertForTokenClassification.from_pretrained(args.transformer_pretrained_model,
                                                               state_dict=model_state_dict,
                                                               cache_dir=args.cache_dir,
-                                                              num_labels=extra_config.num_labels,
+                                                              num_labels=2,
                                                               finetune=extra_config.finetune,
+                                                              list_labels=extra_config.num_labels,
                                                               use_bilstms=extra_config.use_bilstms
                                                               )
     elif args.transformer_model == DISTILBERT_MODEL:
