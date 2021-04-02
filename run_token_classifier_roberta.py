@@ -308,9 +308,9 @@ def _word_is_ahead(word,prev_word,sub_wp_sent):
     return word.startswith(wp) and not wp.startswith("##")
 
 def _bertify(wps, tokenizer):
-    berts = ["<class 'transformers.tokenization_bert.BertTokenizer'>", "<class 'transformers.tokenization_electra.ElectraTokenizer'>"]
-    roberta = ["<class 'transformers.tokenization_roberta.RobertaTokenizer'>"]
-    sps = ["<class 'transformers.tokenization_camembert.CamembertTokenizer'>", "<class 'transformers.tokenization_xlm_roberta.XLMRobertaTokenizer'>"]
+    berts = ["<class 'transformers.tokenization_bert.BertTokenizer'>", "<class 'transformers.tokenization_electra.ElectraTokenizer'>", "<class 'transformers.models.bert.tokenization_bert.BertTokenizer'>"]
+    roberta = ["<class 'transformers.tokenization_roberta.RobertaTokenizer'>", "<class 'transformers.models.roberta.tokenization_roberta.RobertaTokenizer'>"]
+    sps = ["<class 'transformers.tokenization_camembert.CamembertTokenizer'>", "<class 'transformers.tokenization_xlm_roberta.XLMRobertaTokenizer'>", "<class 'transformers.models.camembert.tokenization_camembert.CamembertTokenizer'>", "<class 'transformers.models.xlm_roberta.tokenization_xlm_roberta.XLMRobertaTokenizer'>"]
     puncts = ['.', '?', ',', '!']
     def replace_one(token, speshsymbol):
         if token[0] == speshsymbol:
@@ -319,7 +319,7 @@ def _bertify(wps, tokenizer):
             return token
         else:
             return "##"+token
-        
+    print(str(type(tokenizer)))
     if str(type(tokenizer)) in berts:
         return wps
     elif str(type(tokenizer)) in roberta:

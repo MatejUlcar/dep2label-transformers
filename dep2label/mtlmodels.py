@@ -1,4 +1,5 @@
-from transformers import BertModel, BertPreTrainedModel, DistilBertModel, DistilBertPreTrainedModel, RobertaModel, RobertaPreTrainedModel
+from transformers import BertModel, BertPreTrainedModel, DistilBertModel, DistilBertPreTrainedModel
+from transformers.models.roberta.modeling_roberta import RobertaPreTrainedModel, RobertaModel
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
