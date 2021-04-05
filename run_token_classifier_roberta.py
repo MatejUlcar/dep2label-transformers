@@ -242,7 +242,8 @@ class SLProcessor(DataProcessor):
             
         elif "–" in word and word !="–" and len(word.replace("–",""))!=0:
             word = word.replace("–","")
-    
+        if "…" in word:
+            word = word.replace("…", "...")
         if word == "":
             raise ValueError("Generating an empty word for", ori_word)
             # s.translate(None, string.punctuation)         
@@ -312,14 +313,15 @@ def _bertify(wps, tokenizer):
     roberta = ["<class 'transformers.tokenization_roberta.RobertaTokenizer'>", "<class 'transformers.models.roberta.tokenization_roberta.RobertaTokenizer'>"]
     sps = ["<class 'transformers.tokenization_camembert.CamembertTokenizer'>", "<class 'transformers.tokenization_xlm_roberta.XLMRobertaTokenizer'>", "<class 'transformers.models.camembert.tokenization_camembert.CamembertTokenizer'>", "<class 'transformers.models.xlm_roberta.tokenization_xlm_roberta.XLMRobertaTokenizer'>"]
     puncts = ['.', '?', ',', '!']
+    special_tokens = ['<s>', '</s>', '<unk>', '<mask>']
     def replace_one(token, speshsymbol):
         if token[0] == speshsymbol:
             return token[1:]
-        elif all(y in puncts for y in token):
+        elif all(y in puncts for y in token) or token in special_tokens:
             return token
         else:
             return "##"+token
-    print(str(type(tokenizer)))
+    #print(str(type(tokenizer)))
     if str(type(tokenizer)) in berts:
         return wps
     elif str(type(tokenizer)) in roberta:
@@ -330,8 +332,10 @@ def _bertify(wps, tokenizer):
         #raise TypeError("tokenization class not supported yet")
         raise NotImplementedError("tokenization class not supported yet")
 def _valid_wordpiece_indexes(sent, wp_sent0, tokenizer): 
-    
+
     wp_sent = _bertify(wp_sent0, tokenizer)
+    #print(wp_sent0)
+    #print(wp_sent)
     valid_idxs = []
     chars_to_process = ""
     idx = 0
