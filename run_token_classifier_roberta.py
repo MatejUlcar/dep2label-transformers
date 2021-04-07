@@ -723,7 +723,7 @@ def evaluate(model, device, logger, processor, tokenizer, label_list, args):
               'eval_accuracy': eval_accuracy}
     score = eval_accuracy
     out = eval_accuracy
-    output_eval_file = os.path.join(args.output_dir.rsplit("/", 1)[0], "eval_results.txt")
+    output_eval_file = os.path.join(args.output_dir, "eval_results.txt")
     with open(output_eval_file, "w") as writer:
         logger.info("***** Eval results *****")
         for key in sorted(result.keys()):
@@ -1100,8 +1100,8 @@ def main():
 
                 # Save a trained model
                 model_to_save = model.module if hasattr(model, 'module') else model  # Only save the model it-self
-                output_model_file = os.path.join(args.model_dir)
-              #  output_model_file = os.path.join(args.model_dir, "pytorch_model.bin")
+                #output_model_file = os.path.join(args.model_dir)
+                output_model_file = os.path.join(args.model_dir, "pytorch_model.bin")
 
                 if args.do_train:
                     print ("Saving the best new model...")
@@ -1111,7 +1111,7 @@ def main():
             model.train() #If not, following error: cudnn RNN backward can only be called in training mode
 
     # Load a trained model that you have fine-tuned
-    output_model_file = os.path.join(args.model_dir)
+    output_model_file = os.path.join(args.model_dir, "pytorch_model.bin")
     model_state_dict = torch.load(output_model_file)
 
 
