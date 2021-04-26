@@ -301,7 +301,7 @@ class SLProcessor(DataProcessor):
           
         return examples
 
-def _word_is_ahead(word,prev_word,sub_wp_sent):
+def _word_is_ahead(word,prev_word,sub_wp_sent,tokenizer):
       
     for wp in sub_wp_sent:
         if wp != tokenizer.unk_token and wp not in prev_word:
@@ -325,8 +325,16 @@ def _bertify(wps, tokenizer):
     if str(type(tokenizer)) in berts:
         return wps
     elif str(type(tokenizer)) in roberta:
+        for i in range(len(wps)-1):
+            if wps[i]=="Ġ" and wps[i+1][0]!="Ġ":
+                wps[i+1] = "Ġ"+wps[i+1]
+        wps = list(filter(lambda x: x!="Ġ", wps))
         return list(map(lambda x: replace_one(x, "Ġ"), wps))
     elif str(type(tokenizer)) in sps:
+        for i in range(len(wps)-1):
+            if wps[i]=="▁" and wps[i+1][0]!="▁":
+                wps[i+1] = "▁"+wps[i+1]
+        wps = list(filter(lambda x: x!="▁", wps))
         return list(map(lambda x: replace_one(x, "▁"), wps))
     else:
         #raise TypeError("tokenization class not supported yet")
@@ -411,7 +419,7 @@ def _valid_wordpiece_indexes(sent, wp_sent0, tokenizer):
                         '''
                         if chars_to_process == word: 
                             
-                            if _word_is_ahead(word, sent[idword-1], wp_sent[wp_idx:]):
+                            if _word_is_ahead(word, sent[idword-1], wp_sent[wp_idx:],tokenizer):
                                 wp_idx+=1
                             else:
                                 chars_to_process = ""
