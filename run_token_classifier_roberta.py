@@ -313,7 +313,7 @@ def _bertify(wps, tokenizer):
     roberta = ["<class 'transformers.tokenization_roberta.RobertaTokenizer'>", "<class 'transformers.models.roberta.tokenization_roberta.RobertaTokenizer'>"]
     sps = ["<class 'transformers.tokenization_camembert.CamembertTokenizer'>", "<class 'transformers.tokenization_xlm_roberta.XLMRobertaTokenizer'>", "<class 'transformers.models.camembert.tokenization_camembert.CamembertTokenizer'>", "<class 'transformers.models.xlm_roberta.tokenization_xlm_roberta.XLMRobertaTokenizer'>"]
     puncts = ['.', '?', ',', '!']
-    special_tokens = ['<s>', '</s>', '<unk>', '<mask>']
+    special_tokens = ['<s>', '</s>', '<unk>', '<mask>', '[UNK]']
     def replace_one(token, speshsymbol):
         if token[0] == speshsymbol:
             return token[1:]
@@ -327,14 +327,16 @@ def _bertify(wps, tokenizer):
     elif str(type(tokenizer)) in roberta:
         for i in range(len(wps)-1):
             if wps[i]=="Ġ" and wps[i+1][0]!="Ġ":
+                wps[i] = "[UNK]"
                 wps[i+1] = "Ġ"+wps[i+1]
-        wps = list(filter(lambda x: x!="Ġ", wps))
+        #wps = list(filter(lambda x: x!="Ġ", wps))
         return list(map(lambda x: replace_one(x, "Ġ"), wps))
     elif str(type(tokenizer)) in sps:
         for i in range(len(wps)-1):
             if wps[i]=="▁" and wps[i+1][0]!="▁":
+                wps[i] = "[UNK]"
                 wps[i+1] = "▁"+wps[i+1]
-        wps = list(filter(lambda x: x!="▁", wps))
+        #wps = list(filter(lambda x: x!="▁", wps))
         return list(map(lambda x: replace_one(x, "▁"), wps))
     else:
         #raise TypeError("tokenization class not supported yet")
