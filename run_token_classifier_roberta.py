@@ -225,7 +225,9 @@ class SLProcessor(DataProcessor):
         elif "’’" in word:
             word = word.replace("’’", "'")
         elif "’" in word:
-            word =word.replace("’","'")
+            word = word.replace("’","'")
+        elif "´" in word:
+            word = word.replace("´","'")
         elif " " in word:
             word = word.replace(" ","")
         elif "\u200b" == word:
@@ -242,8 +244,13 @@ class SLProcessor(DataProcessor):
             
         elif "–" in word and word !="–" and len(word.replace("–",""))!=0:
             word = word.replace("–","")
+        # Problematic punctiations, kerning and similar
         if "…" in word:
             word = word.replace("…", "...")
+        if "½" in word:
+            word = word.replace("½", "1/2")
+        if "ﬂ" in word:
+            word = word.replace("ﬂ", "fl")
         if word == "":
             raise ValueError("Generating an empty word for", ori_word)
             # s.translate(None, string.punctuation)         
@@ -486,10 +493,12 @@ current_alignment = {}
             The sentence that is causing the problem is
             sent = {}
                                 
+            valid_idxs = {}
+
             wp_sent = {}
             
             current_alignment = {}
-            """.format(list(enumerate(sent)),list(enumerate(wp_sent)), dict_alignments))
+            """.format(list(enumerate(sent)),list(enumerate(valid_idxs)), list(enumerate(wp_sent)), dict_alignments))
         
     return valid_idxs 
 
