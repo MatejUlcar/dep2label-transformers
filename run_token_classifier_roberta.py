@@ -516,17 +516,17 @@ def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer
         tokens_a = tokenizer.tokenize(" "+example.text_a)
         tokens_b = None
 
-        if example.text_b:
-            tokens_b = tokenizer.tokenize(example.text_b)
-            # Modifies `tokens_a` and `tokens_b` in place so that the total
-            # length is less than the specified length.
-            # Account for [CLS], [SEP], [SEP] with "- 3"
-            _truncate_seq_pair(tokens_a, tokens_b, max_seq_length - 3)
-        else:
-            # Account for [CLS] and [SEP] with "- 2"
-            if len(tokens_a) > max_seq_length - 2:
-                tokens_a = tokens_a[:(max_seq_length - 2)]
-
+        # If the example is too long (ie. more than max_seq_length tokens), we skip it. Account for [CLS] and [SEP] with "- 2"
+        if len(tokens_a) > max_seq_length - 2:
+            #tokens_a = tokens_a[:(max_seq_length - 2)]
+            sys.stderr.write("Skipping too long example: "+str(len(tokens_a))+" tokens: "+example.text_a)
+            features.append(
+            InputFeatures(input_ids=[0]*max_seq_length,
+                          input_mask=[0]*max_seq_length,
+                          position_ids=[0]*max_seq_length,
+                          segment_ids=[0]*max_seq_length,
+                          labels_ids=[[0]*max_seq_length for i in range(num_tasks)]))
+            continue
         #         print ("ex_index", ex_index)
         #         print ("example", example)
         #         print ("ori_tokens_a", ori_tokens_a, len(ori_tokens_a))
@@ -649,8 +649,12 @@ def accuracy(out, labels, mask):
             g_filtered.append(g)
             o_filtered.append(o)
 
-    assert len(o_filtered), len(g_filtered)
-    return accuracy_score(o_filtered, g_filtered)
+    #print(len(o_filtered), len(g_filtered))
+    assert len(o_filtered) == len(g_filtered)
+    if len(g_filtered) == 0:
+        return 0
+    else:
+        return accuracy_score(o_filtered, g_filtered)
 
 
 def evaluate(model, device, logger, processor, tokenizer, label_list, args):
