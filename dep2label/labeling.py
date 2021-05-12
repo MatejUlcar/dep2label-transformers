@@ -151,15 +151,18 @@ class Labeler:
 
             
             # POSTPROCESSING
-            if not l.has_root(decoded_words):
-                l.find_candidates_for_root(decoded_words, headless_words)
-            if not l.has_root(decoded_words):
-                l.assign_root_index_one(decoded_words, headless_words)
-            if l.has_multiple_roots(decoded_words):
-                l.choose_root_from_multiple_candidates(decoded_words)
-            l.assign_headless_words_to_root(decoded_words, headless_words)
-            l.find_cycles(decoded_words)
-           
+            try:
+                if not l.has_root(decoded_words):
+                    l.find_candidates_for_root(decoded_words, headless_words)
+                if not l.has_root(decoded_words):
+                    l.assign_root_index_one(decoded_words, headless_words)
+                if l.has_multiple_roots(decoded_words):
+                    l.choose_root_from_multiple_candidates(decoded_words)
+                l.assign_headless_words_to_root(decoded_words, headless_words)
+                l.find_cycles(decoded_words)
+            except: # Finding root failed, probably due to no decoded words (happens with too long sentences)
+                decoded_words = [['-',]*6,]*len(sentence)
+
             p.convert_labels2conllu(decoded_words)
             decoded_sentences.update({nb_of_sentence: decoded_words})
             nb_of_sentence += 1

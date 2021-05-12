@@ -520,12 +520,12 @@ def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer
         if len(tokens_a) > max_seq_length - 2:
             #tokens_a = tokens_a[:(max_seq_length - 2)]
             sys.stderr.write("Skipping too long example: "+str(len(tokens_a))+" tokens: "+example.text_a)
-            features.append(
-            InputFeatures(input_ids=[0]*max_seq_length,
-                          input_mask=[0]*max_seq_length,
-                          position_ids=[0]*max_seq_length,
-                          segment_ids=[0]*max_seq_length,
-                          labels_ids=[[0]*max_seq_length for i in range(num_tasks)]))
+            tokens = [tokenizer.cls_token] + tokens_a[:(max_seq_length-2)] + [tokenizer.sep_token]
+            features.append(InputFeatures(input_ids=tokenizer.convert_tokens_to_ids(tokens),
+                          input_mask=[0,]*max_seq_length,
+                          position_ids=list(range(max_seq_length)),
+                          segment_ids=[0,]*max_seq_length,
+                          labels_ids=[[label_map[i]["-BOS-"]]+[0,]*(max_seq_length-2)+[label_map[i]["-EOS-"]] for i in range(num_tasks)]))
             continue
         #         print ("ex_index", ex_index)
         #         print ("example", example)
@@ -736,6 +736,8 @@ def evaluate(model, device, logger, processor, tokenizer, label_list, args):
     with open(output_file_name, "w") as temp_out:
         content = []
         for tokens, postags, preds in zip(examples_texts, examples_postags, new_examples_preds):
+            if len(preds) == 0:
+                preds = ["-BOS-{}-BOS-"]+["SH{}punct",]*(len(tokens)-2)+["-EOS-{}-EOS-"]
             content.append("\n".join(["\t".join(element) for element in zip(tokens, postags, preds)]))
         temp_out.write("\n\n".join(content))
         temp_out.write("\n\n")
