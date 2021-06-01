@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 """BERT finetuning runner."""
 from __future__ import absolute_import
 from __future__ import division
@@ -42,170 +43,11 @@ import string
 import numpy as np
 import torch
 from dep2label.labeling import *
+from dep2label.mtlmodels import *
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "tree2labels"))
 logger = logging.getLogger()
-BERT_MODEL="bert_model"
-OPENIA_GPT_MODEL="openai_gpt_model"
-GPT2_MODEL="gpt2_model"
-TRANSFORXL_MODEL="transforxl_model"
-XLNET_MODEL="xlnet_model"
-XLM_MODEL="xlm_modeL"
-DISTILBERT_MODEL="distilbert_model"
-ROBERT_MODEL="robert_model"
 
-MODELS = {BERT_MODEL: (BertModel,       BertTokenizer,       'bert-base-uncased'),
-          DISTILBERT_MODEL: (DistilBertModel, DistilBertTokenizer, 'distilbert-base-cased'),
-         }
-
-
-class MTLBertForTokenClassification(BertPreTrainedModel):
-
-    def __init__(self, config, finetune, list_labels=[], use_bilstms=False):
-        #config2 = config
-        #config2.num_labels = 2
-        super(MTLBertForTokenClassification, self).__init__(config)
-        self.num_labels = list_labels
-        self.num_tasks = len(self.num_labels)
-        self.bert = BertModel(config)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob) 
-        self.use_bilstms=use_bilstms
-        self.lstm_size = 400
-        self.lstm_layers = 2
-        self.bidirectional_lstm = True
-        
-        if self.use_bilstms:
-            self.lstm = nn.LSTM(config.hidden_size, self.lstm_size, num_layers=self.lstm_layers, batch_first=True, 
-                                bidirectional=self.bidirectional_lstm)
-            
-            self.hidden2tagList = nn.ModuleList([nn.Linear(self.lstm_size*(2 if self.bidirectional_lstm else 1), 
-                                                       self.num_labels[idtask])
-                                                       for idtask in range(self.num_tasks)])
-        else:
-            
-            self.hidden2tagList = nn.ModuleList([nn.Linear(config.hidden_size, 
-                                                       self.num_labels[idtask])
-                                                       for idtask in range(self.num_tasks)])
-
-        self.finetune = finetune
-        self.init_weights()
-
-    
-    def forward(self, input_ids, attention_mask=None, token_type_ids=None,
-                position_ids=None, head_mask=None, labels=None):
-
-        
-        hidden_outputs = self.bert(input_ids,
-                            attention_mask=attention_mask,
-                            token_type_ids=token_type_ids,
-                            head_mask=head_mask)
-
-        sequence_output = hidden_outputs[0]
-        
-        if not self.finetune:
-            sequence_output = sequence_output.detach()        
-
-        if self.use_bilstms:
-            self.lstm.flatten_parameters()
-            sequence_output, hidden = self.lstm(sequence_output, None)
-        
-        sequence_output = self.dropout(sequence_output)
-        outputs = [(classifier(sequence_output),) for classifier in self.hidden2tagList]
-        losses = []   
-        
-        for idtask,out in enumerate(outputs):
-            
-            logits = out[0]
-            if labels is not None:
-                loss_fct = CrossEntropyLoss()
-                # Only keep active parts of the loss
-                if attention_mask is not None:
-                    active_loss = attention_mask.view(-1) == 1
-                    active_logits = logits.view(-1, self.num_labels[idtask])[active_loss]
-                    active_labels = labels[:,idtask,:].reshape(-1)[active_loss]
-                    loss = loss_fct(active_logits, active_labels)
-                else:
-                    loss = loss_fct(logits.view(-1, self.num_labels[idtask]), labels.view(-1))
-                
-                losses.append(loss)  
-                 
-                outputs = (sum(losses),) + hidden_outputs
-
-        return outputs
-        
-
-class MTLDistilBertForTokenClassification(DistilBertPreTrainedModel):
-    def __init__(self, config, finetune,use_bilstms=False):
-        super(MTLDistilBertForTokenClassification, self).__init__(config)
-        
-        self.num_labels = config.num_labels
-        self.num_tasks = len(self.num_labels)
-    
-        self.distilbert = DistilBertModel(config)
-        self.dropout = nn.Dropout(config.dropout)
-
-        self.use_bilstms=use_bilstms
-        self.lstm_size = 400
-        self.lstm_layers = 2
-        self.bidirectional_lstm = True
-        
-        if self.use_bilstms:
-            self.lstm = nn.LSTM(config.hidden_size, self.lstm_size, num_layers=self.lstm_layers, batch_first=True, 
-                                bidirectional=self.bidirectional_lstm)
-            
-            self.hidden2tagList = nn.ModuleList([nn.Linear(self.lstm_size*(2 if self.bidirectional_lstm else 1), 
-                                                       self.num_labels[idtask])
-                                                       for idtask in range(self.num_tasks)])
-        else:
-            
-            self.hidden2tagList = nn.ModuleList([nn.Linear(config.hidden_size, 
-                                                       self.num_labels[idtask])
-                                                       for idtask in range(self.num_tasks)])
-
-        self.finetune = finetune
-        self.init_weights()
-
-
-
-    def forward(self, input_ids, attention_mask=None, token_type_ids=None,
-                position_ids=None, head_mask=None, labels=None):
-
-        hidden_outputs = self.distilbert(input_ids,
-                            attention_mask=attention_mask,
-                            head_mask=head_mask)
-
-        sequence_output = hidden_outputs[0]
-        
-        if not self.finetune:
-            sequence_output = sequence_output.detach()        
-
-        if self.use_bilstms:
-            self.lstm.flatten_parameters()
-            sequence_output, hidden = self.lstm(sequence_output, None)
-        
-        sequence_output = self.dropout(sequence_output)
-        outputs = [(classifier(sequence_output),) for classifier in self.hidden2tagList]
-        losses = []   
-        
-        for idtask,out in enumerate(outputs):
-            
-            logits = out[0]
-            if labels is not None:
-                loss_fct = CrossEntropyLoss()
-                # Only keep active parts of the loss
-                if attention_mask is not None:
-                    active_loss = attention_mask.view(-1) == 1
-                    active_logits = logits.view(-1, self.num_labels[idtask])[active_loss]
-                    active_labels = labels[:,idtask,:].reshape(-1)[active_loss]
-                    loss = loss_fct(active_logits, active_labels)
-                else:
-                    loss = loss_fct(logits.view(-1, self.num_labels[idtask]), labels.view(-1))
-                
-                losses.append(loss)  
-                 
-                outputs = (sum(losses),) + hidden_outputs
-
-        return outputs
 
 
 class ExtraConfig(object):
@@ -370,7 +212,9 @@ class SLProcessor(DataProcessor):
         elif "’’" in word:
             word = word.replace("’’", "'")
         elif "’" in word:
-            word =word.replace("’","'")
+            word = word.replace("’","'")
+        elif "´" in word:
+            word = word.replace("´","'")
         elif " " in word:
             word = word.replace(" ","")
         elif "\u200b" == word:
@@ -387,7 +231,13 @@ class SLProcessor(DataProcessor):
             
         elif "–" in word and word !="–" and len(word.replace("–",""))!=0:
             word = word.replace("–","")
-    
+        # Problematic punctiations, kerning and similar
+        if "…" in word:
+            word = word.replace("…", "...")
+        if "½" in word:
+            word = word.replace("½", "1/2")
+        if "ﬂ" in word:
+            word = word.replace("ﬂ", "fl")
         if word == "":
             raise ValueError("Generating an empty word for", ori_word)
             # s.translate(None, string.punctuation)         
@@ -445,15 +295,45 @@ class SLProcessor(DataProcessor):
           
         return examples
 
-def _word_is_ahead(word,prev_word,sub_wp_sent):
+def _word_is_ahead(word,prev_word,sub_wp_sent,tokenizer):
       
     for wp in sub_wp_sent:
-        if wp != "[UNK]" and wp not in prev_word:
+        if wp != tokenizer.unk_token and wp not in prev_word:
              break
-       
     return word.startswith(wp) and not wp.startswith("##")
-def _valid_wordpiece_indexes(sent, wp_sent): 
-      
+
+def _bertify(wps, tokenizer):
+    berts = ["<class 'transformers.tokenization_bert.BertTokenizer'>", "<class 'transformers.tokenization_electra.ElectraTokenizer'>", "<class 'transformers.models.bert.tokenization_bert.BertTokenizer'>"]
+    roberta = ["<class 'transformers.tokenization_roberta.RobertaTokenizer'>", "<class 'transformers.models.roberta.tokenization_roberta.RobertaTokenizer'>"]
+    sps = ["<class 'transformers.tokenization_camembert.CamembertTokenizer'>", "<class 'transformers.tokenization_xlm_roberta.XLMRobertaTokenizer'>", "<class 'transformers.models.camembert.tokenization_camembert.CamembertTokenizer'>", "<class 'transformers.models.xlm_roberta.tokenization_xlm_roberta.XLMRobertaTokenizer'>"]
+    puncts = ['.', '?', ',', '!']
+    special_tokens = ['<s>', '</s>', '<unk>', '<mask>', '[UNK]']
+    def replace_one(token, speshsymbol):
+        if token[0] == speshsymbol:
+            return token[1:]
+        elif all(y in puncts for y in token) or token in special_tokens:
+            return token
+        else:
+            return "##"+token
+    if str(type(tokenizer)) in berts:
+        return wps
+    elif str(type(tokenizer)) in roberta:
+        for i in range(len(wps)-1):
+            if wps[i]=="Ġ" and wps[i+1][0]!="Ġ":
+                wps[i] = "[UNK]"
+                wps[i+1] = "Ġ"+wps[i+1]
+        return list(map(lambda x: replace_one(x, "Ġ"), wps))
+    elif str(type(tokenizer)) in sps:
+        for i in range(len(wps)-1):
+            if wps[i]=="▁" and wps[i+1][0]!="▁":
+                wps[i] = "[UNK]"
+                wps[i+1] = "▁"+wps[i+1]
+        return list(map(lambda x: replace_one(x, "▁"), wps))
+    else:
+        raise NotImplementedError("tokenization class not supported yet")
+def _valid_wordpiece_indexes(sent, wp_sent0, tokenizer): 
+
+    wp_sent = _bertify(wp_sent0, tokenizer)
     valid_idxs = []
     chars_to_process = ""
     idx = 0
@@ -514,7 +394,7 @@ def _valid_wordpiece_indexes(sent, wp_sent):
                             wp_idx += 1
                         continue
                     
-                    elif wp_sent[wp_idx] == "[UNK]":
+                    elif wp_sent[wp_idx] == tokenizer.unk_token:
                         '''  
                         (4) The word could not be tokenized and the BERT tokenizer  generated an [UNK]
                         This can be a problematic case: sometime an original token is split on two, and then each of those
@@ -529,7 +409,7 @@ def _valid_wordpiece_indexes(sent, wp_sent):
                         '''
                         if chars_to_process == word: 
                             
-                            if _word_is_ahead(word, sent[idword-1], wp_sent[wp_idx:]):
+                            if _word_is_ahead(word, sent[idword-1], wp_sent[wp_idx:],tokenizer):
                                 wp_idx+=1
                             else:
                                 chars_to_process = ""
@@ -594,10 +474,12 @@ current_alignment = {}
             The sentence that is causing the problem is
             sent = {}
                                 
+            valid_idxs = {}
+
             wp_sent = {}
             
             current_alignment = {}
-            """.format(list(enumerate(sent)),list(enumerate(wp_sent)), dict_alignments))
+            """.format(list(enumerate(sent)),list(enumerate(valid_idxs)), list(enumerate(wp_sent)), dict_alignments))
         
     return valid_idxs 
 
@@ -612,20 +494,20 @@ def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer
     for (ex_index, example) in enumerate(examples):
 
         ori_tokens_a = example.text_a.split(" ")
-        tokens_a = tokenizer.tokenize(example.text_a)
+        tokens_a = tokenizer.tokenize(" "+example.text_a)
         tokens_b = None
 
-        if example.text_b:
-            tokens_b = tokenizer.tokenize(example.text_b)
-            # Modifies `tokens_a` and `tokens_b` in place so that the total
-            # length is less than the specified length.
-            # Account for [CLS], [SEP], [SEP] with "- 3"
-            _truncate_seq_pair(tokens_a, tokens_b, max_seq_length - 3)
-        else:
-            # Account for [CLS] and [SEP] with "- 2"
-            if len(tokens_a) > max_seq_length - 2:
-                tokens_a = tokens_a[:(max_seq_length - 2)]
-
+        # If the example is too long (ie. more than max_seq_length tokens), we skip it. Account for [CLS] and [SEP] with "- 2"
+        if len(tokens_a) > max_seq_length - 2:
+            #tokens_a = tokens_a[:(max_seq_length - 2)]
+            sys.stderr.write("Skipping too long example: "+str(len(tokens_a))+" tokens: "+example.text_a)
+            tokens = [tokenizer.cls_token] + tokens_a[:(max_seq_length-2)] + [tokenizer.sep_token]
+            features.append(InputFeatures(input_ids=tokenizer.convert_tokens_to_ids(tokens),
+                          input_mask=[0,]*max_seq_length,
+                          position_ids=list(range(max_seq_length)),
+                          segment_ids=[0,]*max_seq_length,
+                          labels_ids=[[label_map[i]["-BOS-"]]+[0,]*(max_seq_length-2)+[label_map[i]["-EOS-"]] for i in range(num_tasks)]))
+            continue
         #         print ("ex_index", ex_index)
         #         print ("example", example)
         #         print ("ori_tokens_a", ori_tokens_a, len(ori_tokens_a))
@@ -649,17 +531,17 @@ def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer
         # For classification tasks, the first vector (corresponding to [CLS]) is
         # used as as the "sentence vector". Note that this only makes sense because
         # the entire model is fine-tuned.
-        ori_tokens_a = ["[CLS]"] + ori_tokens_a + ["[SEP]"]
-        tokens = ["[CLS]"] + tokens_a + ["[SEP]"]
+        ori_tokens_a = [tokenizer.cls_token] + ori_tokens_a + [tokenizer.sep_token]
+        tokens = [tokenizer.cls_token] + tokens_a + [tokenizer.sep_token]
         segment_ids = [0] * len(tokens)
 
         if tokens_b:
-            tokens += tokens_b + ["[SEP]"]
+            tokens += tokens_b + [tokenizer.sep_token]
             segment_ids += [1] * (len(tokens_b) + 1)
 
         input_ids = tokenizer.convert_tokens_to_ids(tokens)
         position_ids = list(range(max_seq_length))
-        valid_indexes = _valid_wordpiece_indexes(ori_tokens_a, tokens)
+        valid_indexes = _valid_wordpiece_indexes(ori_tokens_a, tokens, tokenizer)
 
         input_mask = [1 if idtoken in valid_indexes else 0
                       for idtoken, _ in enumerate(tokens)]
@@ -671,9 +553,9 @@ def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer
             for idtask in range(num_tasks):
                 if idtoken in valid_indexes:
 
-                    if token == "[CLS]":
+                    if token == tokenizer.cls_token:
                         labels_ids[idtask].append(label_map[idtask]["-BOS-"])
-                    elif token == "[SEP]":
+                    elif token == tokenizer.sep_token:
                         labels_ids[idtask].append(label_map[idtask]["-EOS-"])
                     else:
                         try:
@@ -748,8 +630,12 @@ def accuracy(out, labels, mask):
             g_filtered.append(g)
             o_filtered.append(o)
 
-    assert len(o_filtered), len(g_filtered)
-    return accuracy_score(o_filtered, g_filtered)
+    #print(len(o_filtered), len(g_filtered))
+    assert len(o_filtered) == len(g_filtered)
+    if len(g_filtered) == 0:
+        return 0
+    else:
+        return accuracy_score(o_filtered, g_filtered)
 
 
 def evaluate(model, device, logger, processor, tokenizer, label_list, args):
@@ -831,6 +717,8 @@ def evaluate(model, device, logger, processor, tokenizer, label_list, args):
     with open(output_file_name, "w") as temp_out:
         content = []
         for tokens, postags, preds in zip(examples_texts, examples_postags, new_examples_preds):
+            if len(preds) == 0:
+                preds = ["-BOS-{}-BOS-"]+["SH{}punct",]*(len(tokens)-2)+["-EOS-{}-EOS-"]
             content.append("\n".join(["\t".join(element) for element in zip(tokens, postags, preds)]))
         temp_out.write("\n\n".join(content))
         temp_out.write("\n\n")
@@ -841,7 +729,7 @@ def evaluate(model, device, logger, processor, tokenizer, label_list, args):
               'eval_accuracy': eval_accuracy}
     score = eval_accuracy
     out = eval_accuracy
-    output_eval_file = os.path.join(args.output_dir.rsplit("/", 1)[0], "eval_results.txt")
+    output_eval_file = os.path.join(args.output_dir, "eval_results.txt")
     with open(output_eval_file, "w") as writer:
         logger.info("***** Eval results *****")
         for key in sorted(result.keys()):
@@ -877,9 +765,9 @@ def main():
                         help="The input data dir. Should contain the .tsv files (or other data files) for the task.")
     
     parser.add_argument("--transformer_model",
-                        help="Specify the type of the transformer model from this list: 'bert-model', 'openai_gpt_model',"
-                        "'gpt2_model','ctrl_model','transforxl_model','xlnet_model','xlm_model','distilbert_model','robert_model',"
-                        "xlmroberta_model")
+                        choices=['bert','roberta','distilbert'],
+                        required=True,
+                        help="Specify the type of the transformer model. 'bert' covers all bert-based models, 'roberta' covers all roberta/xlm-roberta/camembert based models, 'distilbert' covers DistilBertModel",)
     
     parser.add_argument("--transformer_pretrained_model",
                         help="Specify a pretrained model to fine-tune. For example: 'bert-base-cased','bert-large-cased',"
@@ -1078,25 +966,21 @@ def main():
     if args.status=="train":
         extra_config.write_extra_bert_config(os.path.join(args.model_dir) + ".extra_config")
 
-    if args.transformer_model == BERT_MODEL or True:
-
-        model = MTLBertForTokenClassification.from_pretrained(args.transformer_pretrained_model,
-                                                      # cache_dir=PYTORCH_PRETRAINED_BERT_CACHE / 'distributed_{}'.format(args.local_rank),
-                                                       num_labels=2,
-                                                       finetune=not args.not_finetune,
-                                                       return_dict=False,
-                                                       list_labels=num_labels,
-                                                       use_bilstms=args.use_bilstms)
-    elif args.transformer_model == DISTILBERT_MODEL:
-
-        model = MTLDistilBertForTokenClassification.from_pretrained(args.transformer_pretrained_model,
-                                                          # cache_dir=PYTORCH_PRETRAINED_BERT_CACHE / 'distributed_{}'.format(args.local_rank),
-                                                           num_labels=num_labels,
-                                                           finetune=not args.not_finetune,
-                                                           use_bilstms=args.use_bilstms)
-
-    else: raise NotImplementedError("The selected transformer is not available for parsing as token classification")
-
+    
+    if args.transformer_model == 'bert':
+        MTL = MTLBertForTokenClassification
+    elif args.transformer_model == 'roberta':
+        MTL = MTLRobertaForTokenClassification
+    elif args.transformer_model == 'distilbert':
+        MTL = MTLDistilBertForTokenClassification
+    else: raise NotImplementedError("The selected transformer is not available for parsing as token classification")    
+    model = MTL.from_pretrained(args.transformer_pretrained_model,
+                                num_labels=2,
+                                finetune=not args.not_finetune,
+                                return_dict=False,
+                                list_labels=num_labels,
+                                use_bilstms=args.use_bilstms)
+    
    # print (model)
 
     if args.fp16:
@@ -1222,8 +1106,8 @@ def main():
 
                 # Save a trained model
                 model_to_save = model.module if hasattr(model, 'module') else model  # Only save the model it-self
-                output_model_file = os.path.join(args.model_dir)
-              #  output_model_file = os.path.join(args.model_dir, "pytorch_model.bin")
+                #output_model_file = os.path.join(args.model_dir)
+                output_model_file = os.path.join(args.model_dir, "pytorch_model.bin")
 
                 if args.do_train:
                     print ("Saving the best new model...")
@@ -1233,7 +1117,7 @@ def main():
             model.train() #If not, following error: cudnn RNN backward can only be called in training mode
 
     # Load a trained model that you have fine-tuned
-    output_model_file = os.path.join(args.model_dir)
+    output_model_file = os.path.join(args.model_dir, "pytorch_model.bin")
     model_state_dict = torch.load(output_model_file)
 
 
@@ -1241,24 +1125,16 @@ def main():
     extra_config.load_extra_bert_config(os.path.join(args.model_dir) + ".extra_config")
 
 
-    if args.transformer_model == BERT_MODEL:
-        model = MTLBertForTokenClassification.from_pretrained(args.transformer_pretrained_model,
-                                                              state_dict=model_state_dict,
-                                                              cache_dir=args.cache_dir,
-                                                              num_labels=2,
-                                                              finetune=extra_config.finetune,
-                                                              list_labels=extra_config.num_labels,
-                                                              use_bilstms=extra_config.use_bilstms
-                                                              )
-    elif args.transformer_model == DISTILBERT_MODEL:
-        model = MTLDistilBertForTokenClassification.from_pretrained(args.transformer_pretrained_model,
-                                                                    state_dict=model_state_dict,
-                                                                    cache_dir=args.cache_dir,
-                                                                    # cache_dir=PYTORCH_PRETRAINED_BERT_CACHE / 'distributed_{}'.format(args.local_rank),
-                                                                    num_labels=extra_config.num_labels,
-                                                                    finetune=extra_config.finetune,
-                                                                    use_bilstms=extra_config.use_bilstms
-                                                                    )
+    #if args.transformer_model == BERT_MODEL:
+    model = MTL.from_pretrained(args.transformer_pretrained_model,
+                                state_dict=model_state_dict,
+                                cache_dir=args.cache_dir,
+                                num_labels=2,
+                                finetune=extra_config.finetune,
+                                list_labels=extra_config.num_labels,
+                                use_bilstms=extra_config.use_bilstms
+                                )
+
 
     model.to(device)
 
