@@ -318,6 +318,7 @@ def _bertify(wps, tokenizer):
     if str(type(tokenizer)) in berts:
         return wps
     elif str(type(tokenizer)) in roberta:
+        #wps[1] = "Ġ"+wps[1]
         for i in range(len(wps)-1):
             if wps[i]=="Ġ" and wps[i+1][0]!="Ġ":
                 wps[i] = "[UNK]"
@@ -340,10 +341,11 @@ def _valid_wordpiece_indexes(sent, wp_sent0, tokenizer):
       
     wp_idx = 0
     case = -1
-    
+        
     dict_alignments = {}
     for idword, word in enumerate(sent):
-        
+        if str(type(tokenizer)) in ["<class 'transformers.tokenization_roberta.RobertaTokenizer'>", "<class 'transformers.models.roberta.tokenization_roberta.RobertaTokenizer'>"]:
+            word = ''.join(tokenizer.tokenize(word))
         chars_to_process = word
 
         '''
@@ -356,7 +358,6 @@ def _valid_wordpiece_indexes(sent, wp_sent0, tokenizer):
             
         else:
             while chars_to_process != "":
-                
                 try:
                     if word.startswith(wp_sent[wp_idx]) and chars_to_process == word:
                         '''
@@ -483,7 +484,7 @@ current_alignment = {}
         
     return valid_idxs 
 
-def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer):
+def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer, args):
     """Loads a data file into a list of `InputBatch`s."""
 
     label_map = [{l: i for i, l in enumerate(component_label)} for j, component_label in enumerate(label_list)]
@@ -541,6 +542,18 @@ def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer
 
         input_ids = tokenizer.convert_tokens_to_ids(tokens)
         position_ids = list(range(max_seq_length))
+        if args.nonutf:
+            def latin2utf(tokenx):
+                if tokenx.startswith('Ġ'):
+                    tokenxu = tokenx[1:].encode()
+                    tokenu = 'Ġ'+tokenxu.decode('utf8')
+                else:
+                    tokenxu = tokenx.encode()
+                    tokenu = tokenxu.decode('utf8')
+                return tokenu
+            #tokens_enc = [t.encode('latin1') for t in tokens]
+            #tokens = [t.decode('utf8') for t in tokens_enc]
+            tokens = list(map(latin2utf, tokens))
         valid_indexes = _valid_wordpiece_indexes(ori_tokens_a, tokens, tokenizer)
 
         input_mask = [1 if idtoken in valid_indexes else 0
@@ -561,9 +574,9 @@ def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer
                         try:
                             label_mapped = label_map[idtask][example.labels[idtask][i]]
                             labels_ids[idtask].append(label_mapped)
-                        except KeyError:
+                        #except KeyError:
+                        except:
                             labels_ids[idtask].append(0)
-
                         if idtask == num_tasks - 1:
                             i += 1
                 else:
@@ -647,7 +660,7 @@ def evaluate(model, device, logger, processor, tokenizer, label_list, args):
         eval_examples = processor.get_dev_examples(args.data_dir)
 
     eval_features = convert_examples_to_features(
-        eval_examples, label_list, args.max_seq_length, tokenizer)
+        eval_examples, label_list, args.max_seq_length, tokenizer, args)
     logger.info("***** Running evaluation *****")
     logger.info("  Num examples = %d", len(eval_examples))
     logger.info("  Batch size = %d", args.eval_batch_size)
@@ -871,7 +884,7 @@ def main():
     parser.add_argument("--encoding",
                         type=str,
                         help="encoding type")
-    
+    parser.add_argument("--nonutf", action="store_true")
     #Specific args to evaluate dependency parsing
     parser.add_argument("--conll_ud",
                         type=str,
@@ -1032,7 +1045,7 @@ def main():
     tr_loss = 0
     if args.do_train:
         train_features = convert_examples_to_features(
-            train_examples, label_list, args.max_seq_length, tokenizer)
+            train_examples, label_list, args.max_seq_length, tokenizer, args)
         logger.info("***** Running training *****")
         logger.info("  Num examples = %d", len(train_examples))
         logger.info("  Batch size = %d", args.train_batch_size)
